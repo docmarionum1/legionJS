@@ -111,6 +111,14 @@ define([
      */
     clientID: null,
 
+    /**
+     * Queue of messages from the server/client to process.
+     * @type {Array}
+     * @default [],
+     * @private
+     */
+    _messages: [],
+
 
    /**
     * Initialize the Game class.
@@ -164,6 +172,11 @@ define([
           this.event.trigger('sync', [message]);
         }));
         this.event.on('sync', Util.hitch(this, this.clientHandleSync));
+
+        // Respond to ping request with pong
+        this.socket.on('ping', Util.hitch(this, function() {
+          this.socket.emit('pong');
+        }));
       }
     },
 
@@ -203,6 +216,29 @@ define([
 
       // Send the connection message to the client.
       socket.emit('connected', this.serverConnectionMessage(socket));
+
+      // Determine latecny
+      socket.lastLatencies = [];
+      var lastPingTime = new Date();
+      socket.emit('ping');
+      socket.on('pong', function() {
+        if (socket.lastLatencies.legnth > 10) {
+          socket.lastLatencies.shift();
+        }
+        var newTime = new Date();
+        socket.lastLatencies.push((newTime - lastPingTime) / 2);
+        lastPingTime = newTime;
+        if (socket.lastLatencies.length === 10) {
+          var sum = 0;
+          for (var i = 0; i < socket.lastLatencies.length; i++) {
+            sum += socket.lastLatencies[i];
+          }
+          socket.latency = sum / 10;
+          console.log('latency: ' + socket.latency);
+        } else {
+          socket.emit('ping');
+        }
+      });
     },
 
     /**
@@ -242,7 +278,10 @@ define([
      * @param  {Object|Object[]} message
      */
     clientHandleSync: function(message) {
-      this.environment._sync(message);
+      this._messages.push(message);
+      if (this._messages.length === 2) {
+        this.environment._sync(this._messages);
+      }
     },
 
     /**
@@ -258,7 +297,8 @@ define([
      * Send the state of the server to the clients.
      */
     serverSendState: function() {
-      var message = this.environment._getSyncMessage();
+      var message = {timestamp: this.clock};
+      message.entities = this.environment._getSyncMessage();
       this.io.emit('sync', message);
     },
 

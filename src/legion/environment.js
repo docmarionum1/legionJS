@@ -212,6 +212,23 @@ define(['legion/class'], function(Class) {
 
       _render: function() {
         legion._renderer.render(this.stage);
+      },
+
+      _sync: function(messages) {
+        var oldMsg = messages.shift();
+        var newMsg = messages[0];
+        var delta = (newMsg.timestamp - oldMsg.timestamp) / 1000;
+
+        for (var i = 0; i < oldMsg.entities.length; i++) {
+          var entity = oldMsg.entities[i];
+          //If the entity is new to the client/server.
+          if (this.entities[entity.id] === undefined) {
+            this.addEntity(new legion._classes[entity.className](entity));
+          }
+          entity = this.entities[entity.id];
+          entity.vx = (newMsg.entities[i].x - oldMsg.entities[i].x) / delta;
+          entity.vy = (newMsg.entities[i].y - oldMsg.entities[i].y) / delta;
+        }
       }
 
     });
